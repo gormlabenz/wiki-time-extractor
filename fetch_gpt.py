@@ -23,7 +23,7 @@ def extract_events_from_json(input_json_string):
               f"Given the JSON below, extract significant events from the \"history_text_cleaned\" "
               f"and \"short_description_text_cleaned\" fields.\n\n"
               f"```"
-              f"{input_json_string.replace('{', '{{').replace('}', '}}')}"
+              f"{input_json_string}"
               f"```\n\n"
               "Please generate the expected output as a valid JSON format and place it between code fences.\n\n"
               "Expected Output Format:\n\n"
@@ -42,23 +42,27 @@ def extract_events_from_json(input_json_string):
               "```\n\n"
               "Please make sure your response contains a valid JSON structure wrapped between code fences.")
 
+    messages = [
+        {"role": "system", "content": "You are a specialist in converting and extracting information from JSON based on historical events."},
+        {"role": "user", "content": prompt}
+    ]
+
     # Fetch the API
     response = openai.ChatCompletion.create(
         model="gpt-4",
-        messages=[
-            {"role": "system", "content": "You are a specialist in converting and extracting information from JSON based on historical events."},
-            {"role": "user", "content": prompt}
-        ]
+        messages=messages
     )
 
     # Extract and validate the response JSON
     output_text = response.choices[0].message['content'].strip()
 
+    messages.append({"role": "assistant", "content": output_text})
+
     # Extract JSON between code fences using regex
     match = re.search(r'```\n(.*?)\n```', output_text, re.DOTALL)
     if not match:
         logging.error('No JSON found between code fences.')
-        return refetch_api_with_error_message("No JSON found between code fences.", input_json_string)
+        return refetch_api_with_error_message(messages, "No JSON found between code fences.", input_json_string)
 
     json_str_between_fences = match.group(1)
 
@@ -68,11 +72,11 @@ def extract_events_from_json(input_json_string):
         return output_json
     except json.JSONDecodeError as e:
         logging.error(f'Error decoding JSON: {e}')
-        return refetch_api_with_error_message(str(e), input_json_string)
+        return refetch_api_with_error_message(messages, str(e), input_json_string)
 # Function to refetch the API on error
 
 
-def refetch_api_with_error_message(error_message, input_json_string):
+def refetch_api_with_error_message(messages, error_message, input_json_string):
 
     logging.info('Refetching with error message...')
 
@@ -92,12 +96,11 @@ approximateDate: true if the date is approximate, false otherwise.
 
 Return the translated JSON."""
 
+    messages.append({"role": "user", "content": retry_prompt})
+
     response = openai.ChatCompletion.create(
         model="gpt-4",
-        messages=[
-            {"role": "system", "content": "You are a specialist in converting and extracting information from JSON based on historical events."},
-            {"role": "user", "content": retry_prompt}
-        ]
+        messages=messages
     )
 
     output_text = response.choices[0].message['content'].strip()
