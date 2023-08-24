@@ -161,3 +161,4 @@ cython_debug/
 
 dump.xml
 output/*
+generated_output/*

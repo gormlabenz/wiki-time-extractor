@@ -1,16 +1,22 @@
 import json
+import logging
 import re
 
 import mwparserfromhell
 import mwxml
 
-# Eine Liste von regulären Ausdrücken für die Bereinigung
+logging.basicConfig(level=logging.INFO)
+
 patterns = [
     re.compile(r'\[\[File:.*?\]\]', re.IGNORECASE),
     re.compile(r'^thumb\s*\|.*$', re.IGNORECASE | re.MULTILINE),
     re.compile(
         r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+')
 ]
+
+
+def get_next_filename(base_filename, counter):
+    return f"{base_filename.rsplit('.', 1)[0]}_{counter}.json"
 
 
 def clean_text(text):
@@ -86,96 +92,87 @@ def parse_coord(template):
     }
 
 
-def process_dump(dump_file, output_file):
+def process_dump(dump_file, base_output_file):
     dump = mwxml.Dump.from_file(open(dump_file))
-
-    # Variables for counting processed and saved articles
-    # Variables for counting processed and saved articles
-    processed_articles = 0
     saved_articles = 0
+    file_counter = 1
+    processed_articles = 0
     articles_list = []
 
-    with open(output_file, 'w', newline='') as output:
-        articles = 0
+    for page in dump:
+        if page.redirect or page.namespace != 0:
+            continue
 
-        # Iterate through the pages in the dump
-        for page in dump:
+        for revision in page:
+            try:
+                wikicode = mwparserfromhell.parse(revision.text)
+                main_coords = [template for template in wikicode.filter_templates(
+                ) if template.name.matches("Coord") and "display=title" in template]
+                sections = wikicode.get_sections(include_lead=True, flat=True)
+                history_section = list(
+                    filter(lambda section: '== History ==' in section, sections))
+                short_description_section = list(
+                    filter(lambda section: '{{short description' in section, sections))
 
-            # Skip redirection pages
-            if page.redirect or page.namespace != 0:
-                continue
+                if any(history_section) and any(short_description_section) and any(main_coords):
+                    history_text = mwparserfromhell.parse(history_section[0]).strip_code(
+                        normalize=True, collapse=True, keep_template_params=False)
 
-            for revision in page:
-                try:
-                    # Parse the content of the revision
-                    wikicode = mwparserfromhell.parse(revision.text)
+                    short_description_text = mwparserfromhell.parse(short_description_section[0]).strip_code(
+                        normalize=True, collapse=True, keep_template_params=False)
 
-                    # Filter all coord templates with "display=title" out
-                    main_coords = [template for template in wikicode.filter_templates() if
-                                   template.name.matches("Coord") and "display=title" in template]
+                    # Remove the first line if it contains "History"
+                    lines = history_text.split("\n")
 
-                    sections = wikicode.get_sections(
-                        include_lead=True, flat=True)
+                    if lines and "History" in lines[0]:
+                        lines = lines[1:]
 
-                    history_section = list(
-                        filter(lambda section: '== History ==' in section, sections))
-                    short_description_section = list(
-                        filter(lambda section: '{{short description' in section, sections))
+                    history_text = "\n".join(lines)
 
-                    if any(history_section) and any(short_description_section) and any(main_coords):
-                        print("Processed:", page.title, "Nr.", articles)
+                    title = page.title
+                    history_text_cleaned = clean_text(history_text)
+                    short_description_text_cleaned = clean_text(
+                        short_description_text)
+                    main_coords_parsed = parse_coord(str(main_coords[0]))
 
-                        history_text = mwparserfromhell.parse(history_section[0]).strip_code(
-                            normalize=True, collapse=True, keep_template_params=False)
+                    if history_text_cleaned == "" or short_description_text_cleaned == "" or main_coords_parsed is None:
+                        continue
 
-                        short_description_text = mwparserfromhell.parse(short_description_section[0]).strip_code(
-                            normalize=True, collapse=True, keep_template_params=False)
+                    # Store the data into the buffer
+                    article_data = {
+                        'title': title,
+                        'history_text_cleaned': history_text_cleaned,
+                        'short_description_text_cleaned': short_description_text_cleaned,
+                        'main_coords_parsed': main_coords_parsed,
+                        'id': page.id,
 
-                        # Remove the first line if it contains "History"
-                        lines = history_text.split("\n")
+                    }
+                    articles_list.append(article_data)
 
-                        if lines and "History" in lines[0]:
-                            lines = lines[1:]
+                    saved_articles += 1
 
-                        history_text = "\n".join(lines)
+                    if saved_articles % 100 == 0:
+                        output_file = get_next_filename(
+                            base_output_file, file_counter)
+                        with open(output_file, 'w', encoding='utf-8') as file:
+                            json.dump(articles_list, file,
+                                      ensure_ascii=False, indent=4)
+                        articles_list.clear()
+                        file_counter += 1
+                        logging.info(
+                            f"{page.title} - Processed articles: {processed_articles} and saved to {output_file}")
 
-                        title = page.title
-                        history_text_cleaned = clean_text(history_text)
-                        short_description_text_cleaned = clean_text(
-                            short_description_text)
-                        main_coords_parsed = parse_coord(str(main_coords[0]))
+                processed_articles += 1
+            except Exception as e:
+                logging.error(
+                    f"Error processing: {page.title} Nr. {saved_articles}. Error: {e}")
 
-                        # Store the data into the buffer
-                        article_data = {
-                            'title': title,
-                            'history_text_cleaned': history_text_cleaned,
-                            'short_description_text_cleaned': short_description_text_cleaned,
-                            'main_coords_parsed': main_coords_parsed
-                        }
-                        articles_list.append(article_data)
-
-                        processed_articles += 1
-
-                        if processed_articles % 100 == 0:
-                            with open(output_file, 'a', encoding='utf-8') as file:
-                                json.dump(articles_list, file,
-                                          ensure_ascii=False, indent=4)
-                            articles_list.clear()
-
-                            print("Processed articles:", processed_articles)
-                except:
-                    print("Error processing:", page.title, "Nr.", articles)
-                    continue
-
-                    # Save the buffer to CSV every 1000 iterations
-
-            articles += 1
-
-        # Save any remaining articles to JSON
-        if articles_list:
-            with open(output_file, 'a', encoding='utf-8') as file:
-                json.dump(articles_list, file, ensure_ascii=False, indent=4)
+   # Save any remaining articles to a new JSON file
+    if articles_list:
+        output_file = get_next_filename(base_output_file, file_counter)
+        with open(output_file, 'w', encoding='utf-8') as file:
+            json.dump(articles_list, file, ensure_ascii=False, indent=4)
 
 
 if __name__ == "__main__":
-    process_dump("dump.xml", "filtered_dump.json")
+    process_dump("dump.xml", "output/filtered_dump.json")
