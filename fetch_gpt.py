@@ -2,14 +2,21 @@ import json
 import logging
 import os
 import re
+from pprint import pprint
 
 import openai
 
-logging.basicConfig(level=logging.DEBUG,
+logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Set API key
 openai.api_key = os.getenv("OPENAI_API_KEY")
+
+ChatCompletionConfig = {
+    "model": "gpt-4",
+    "temperature": 0.5,
+    "stop": "</code>"
+}
 
 # Function to extract and validate the output JSON
 
@@ -22,25 +29,26 @@ def extract_events_from_json(input_json_string):
     prompt = (f"You are a service that translates a JSON into another JSON based on historical events. "
               f"Given the JSON below, extract significant events from the \"history_text_cleaned\" "
               f"and \"short_description_text_cleaned\" fields.\n\n"
-              f"```"
+              f"Describe the events with short concise sentences in a narrative manner.\n\n"
+              f"<code>"
               f"{input_json_string}"
-              f"```\n\n"
+              f"</code>\n\n"
               "Please generate the expected output as a valid JSON format and place it between code fences.\n\n"
               "Expected Output Format:\n\n"
-              "```\n"
+              "<code>\n"
               "{\n"
               "  \"id\": \"Extracted from the input JSON.\",\n"
               "  \"events\": [\n"
               "    {\n"
               "      \"description\": \"A brief summary of the event.\",\n"
-              "      \"conclusionWord\": \"One word that sums up the event.\",\n"
-              "      \"time\": \"Either a single Date in strict ISO 8601 format 'YYYY-MM-DD' or a duration object with 'from' and 'to' dates in strict ISO 8601 format 'YYYY-MM-DD'.\",\n"
+              "      \"shortDescription\": \"A summary of the event using strictly no more than 3 words.\",\n"
+              "      \"time\": \"Strict ISO 8601 date format 'YYYY-MM-DD' or a duration object with 'from' and 'to' dates, both strictly in 'YYYY-MM-DD' format. No other characters or suffixes allowed.\",\n"
               "      \"approximateDate\": \"true if the date is approximate, false otherwise.\"\n"
               "    }\n"
               "  ]\n"
               "}\n"
-              "```\n\n"
-              "Please make sure your response contains a valid JSON structure wrapped between code fences.")
+              "</code>\n\n"
+              "Please make sure your response contains a valid JSON structure wrapped between in a html code block <code>...</code>.\n\n")
 
     messages = [
         {"role": "system", "content": "You are a specialist in converting and extracting information from JSON based on historical events."},
@@ -49,17 +57,19 @@ def extract_events_from_json(input_json_string):
 
     # Fetch the API
     response = openai.ChatCompletion.create(
-        model="gpt-4",
+        model=ChatCompletionConfig['model'],
+        temperature=ChatCompletionConfig['temperature'],
+        stop=ChatCompletionConfig['stop'],
         messages=messages
     )
 
     # Extract and validate the response JSON
     output_text = response.choices[0].message['content'].strip()
-
+    pprint(output_text)
     messages.append({"role": "assistant", "content": output_text})
 
+    match = re.search(r'<code>([\s\S]+?)</code>', output_text)
     # Extract JSON between code fences using regex
-    match = re.search(r'```\n(.*?)\n```', output_text, re.DOTALL)
     if not match:
         logging.error('No JSON found between code fences.')
         return refetch_api_with_error_message(messages, "No JSON found between code fences.", input_json_string)
@@ -80,30 +90,40 @@ def refetch_api_with_error_message(messages, error_message, input_json_string):
 
     logging.info('Refetching with error message...')
 
-    retry_prompt = f"""The JSON structure returned was incorrect because of the following reason: {error_message}. 
-Given the original data, can you generate the expected JSON format as specified earlier?
-
-{input_json_string}
-
-Expected Output Format:
-
-id: Extracted from the input JSON.
-events: A list of events. For each event:
-description: A brief summary of the event.
-conclusionWord: One word that sums up the event.
-time: Either a single Date in strict ISO 8601 format "YYYY-MM-DD" or a duration object with "from" and "to" dates in strict ISO 8601 format "YYYY-MM-DD".
-approximateDate: true if the date is approximate, false otherwise.
-
-Return the translated JSON."""
+    retry_prompt = (f"The JSON structure returned was incorrect because of the following reason: {error_message}. "
+                    f"Given the original data, can you generate the expected JSON format as specified earlier?\n\n"
+                    f"<code>"
+                    f"{input_json_string}"
+                    f"</code>\n\n"
+                    "Expected Output Format:\n\n"
+                    "<code>\n"
+                    "{\n"
+                    "  \"id\": \"Extracted from the input JSON.\",\n"
+                    "  \"events\": [\n"
+                    "    {\n"
+                    "      \"description\": \"A brief summary of the event.\",\n"
+                    "      \"shortDescription\": \"A summary of the event using strictly no more than 3 words.\",\n"
+                    "      \"time\": \"Strict ISO 8601 date format 'YYYY-MM-DD' or a duration object with 'from' and 'to' dates, both strictly in 'YYYY-MM-DD' format. No other characters or suffixes allowed.\",\n"
+                    "      \"approximateDate\": \"true if the date is approximate, false otherwise.\"\n"
+                    "    }\n"
+                    "  ]\n"
+                    "}\n"
+                    "</code>\n\n"
+                    "Please make sure your response contains a valid JSON structure wrapped between in a html code block <code>...</code>.\n\n")
 
     messages.append({"role": "user", "content": retry_prompt})
+    pprint(messages)
 
     response = openai.ChatCompletion.create(
-        model="gpt-4",
+        model=ChatCompletionConfig['model'],
+        temperature=ChatCompletionConfig['temperature'],
+        stop=ChatCompletionConfig['stop'],
         messages=messages
     )
 
     output_text = response.choices[0].message['content'].strip()
+
+    pprint(output_text)
 
     # Extract JSON between code fences using regex, if present
     match = re.search(r'```\n(.*?)\n```', output_text, re.DOTALL)
