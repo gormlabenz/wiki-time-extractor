@@ -33,7 +33,7 @@ def extract_events_from_json(input_json_string):
               f"<code>"
               f"{input_json_string}"
               f"</code>\n\n"
-              "Please generate the expected output as a valid JSON format and place it between code fences.\n\n"
+              "Please generate the expected output as a valid JSON format and place it inside a code block.\n\n"
               "Expected Output Format:\n\n"
               "<code>\n"
               "{\n"
@@ -48,7 +48,8 @@ def extract_events_from_json(input_json_string):
               "  ]\n"
               "}\n"
               "</code>\n\n"
-              "Please make sure your response contains a valid JSON structure wrapped between in a html code block <code>...</code>.\n\n")
+              "Please make sure your response contains a valid JSON structure wrapped between in a html code block <code>...</code>.\n\n"
+              "Return only code block, no text.\n\n")
 
     messages = [
         {"role": "system", "content": "You are a specialist in converting and extracting information from JSON based on historical events."},
@@ -65,19 +66,23 @@ def extract_events_from_json(input_json_string):
 
     # Extract and validate the response JSON
     output_text = response.choices[0].message['content'].strip()
+
+    # Add stop token to the end of the output text
+    output_text += ChatCompletionConfig['stop']
+
     pprint(output_text)
     messages.append({"role": "assistant", "content": output_text})
 
     match = re.search(r'<code>([\s\S]+?)</code>', output_text)
-    # Extract JSON between code fences using regex
+    # Extract JSON inside code block using regex
     if not match:
-        logging.error('No JSON found between code fences.')
-        return refetch_api_with_error_message(messages, "No JSON found between code fences.", input_json_string)
+        logging.error('No JSON found inside code block.')
+        return refetch_api_with_error_message(messages, "No JSON found inside code block.", input_json_string)
 
-    json_str_between_fences = match.group(1)
+    json_str_in_code_block = match.group(1)
 
     try:
-        output_json = json.loads(json_str_between_fences)
+        output_json = json.loads(json_str_in_code_block)
         logging.info('JSON extraction successful.')
         return output_json
     except json.JSONDecodeError as e:
@@ -109,7 +114,8 @@ def refetch_api_with_error_message(messages, error_message, input_json_string):
                     "  ]\n"
                     "}\n"
                     "</code>\n\n"
-                    "Please make sure your response contains a valid JSON structure wrapped between in a html code block <code>...</code>.\n\n")
+                    "Please make sure your response contains a valid JSON structure wrapped between in a html code block <code>...</code>.\n\n"
+                    "Return only code block, no text.\n\n")
 
     messages.append({"role": "user", "content": retry_prompt})
     pprint(messages)
@@ -123,10 +129,13 @@ def refetch_api_with_error_message(messages, error_message, input_json_string):
 
     output_text = response.choices[0].message['content'].strip()
 
+    # add stop token to the end of the output text
+    output_text += ChatCompletionConfig['stop']
+
     pprint(output_text)
 
-    # Extract JSON between code fences using regex, if present
-    match = re.search(r'```\n(.*?)\n```', output_text, re.DOTALL)
+    # Extract JSON inside code block using regex, if present
+    match = re.search(r'<code>([\s\S]+?)</code>', output_text)
     json_to_parse = match.group(1) if match else output_text
 
     try:
@@ -150,8 +159,17 @@ for item in data:
 
     # Extract events from the JSON and save the response to a separate JSON file
     output_data = extract_events_from_json(json.dumps(item))
+
+    output_file_path = f"generated_output/{item['id']}.json"
+
+    # Check if the file already exists
+    if os.path.exists(output_file_path):
+        logging.warning(
+            f"A file with ID {item['id']} already exists. Skipping...")
+        continue
+
     if output_data:
-        with open(f"generated_output/{item['id']}.json", 'w') as outfile:
-            json.dump(output_data, outfile)
+        with open(output_file_path, 'w') as outfile:
+            json.dump(output_data, outfile, indent=4)
 
 logging.info('Script execution completed.')
