@@ -162,3 +162,5 @@ cython_debug/
 dump.xml
 output/*
 generated_output/*
+output_cleaned/*
+generated_output_cleaned/*

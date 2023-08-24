@@ -148,7 +148,7 @@ def refetch_api_with_error_message(messages, error_message, input_json_string):
 
 
 # Read the input JSON file
-with open('output/filtered_dump_1.json', 'r') as file:
+with open('output/filtered_dump_2.json', 'r') as file:
     data = json.load(file)
 
 # Process each item in the input JSON
@@ -157,9 +157,6 @@ for item in data:
     if 'main_coords_parsed' in item:
         del item['main_coords_parsed']
 
-    # Extract events from the JSON and save the response to a separate JSON file
-    output_data = extract_events_from_json(json.dumps(item))
-
     output_file_path = f"generated_output/{item['id']}.json"
 
     # Check if the file already exists
@@ -167,6 +164,9 @@ for item in data:
         logging.warning(
             f"A file with ID {item['id']} already exists. Skipping...")
         continue
+
+    # Extract events from the JSON and save the response to a separate JSON file
+    output_data = extract_events_from_json(json.dumps(item))
 
     if output_data:
         with open(output_file_path, 'w') as outfile:
