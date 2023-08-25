@@ -132,8 +132,8 @@ def transform_and_clean_data(data):
 
 
 def main():
-    source_dir = "generated_output"
-    dest_dir = "generated_output_cleaned"
+    source_dir = "events"
+    dest_dir = "events_cleaned"
 
     if not os.path.exists(dest_dir):
         os.makedirs(dest_dir)

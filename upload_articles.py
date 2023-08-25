@@ -46,7 +46,7 @@ def upload_data_to_supabase(file_path):
 
 
 # Automatisches Laden aller JSON-Dateien im angegebenen Ordner
-file_paths = glob.glob("output_cleaned/*.json")
+file_paths = glob.glob("articles_cleaned/*.json")
 
 for file_path in file_paths:
     upload_data_to_supabase(file_path)

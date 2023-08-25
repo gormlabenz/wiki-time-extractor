@@ -43,8 +43,8 @@ def comprehensive_clean(text):
 
 
 # Pfad zum Ausgabeordner festlegen
-output_dir = "output"
-cleaned_output_dir = "output_cleaned"
+output_dir = "articles"
+cleaned_output_dir = "articles_cleaned"
 
 # Stellen Sie sicher, dass der cleaned_output_dir existiert
 if not os.path.exists(cleaned_output_dir):
@@ -52,8 +52,8 @@ if not os.path.exists(cleaned_output_dir):
 
 # Durch alle Dateien im Ausgabeordner iterieren
 for filename in os.listdir(output_dir):
-    # Überprüfen Sie, ob die Datei dem Muster "filtered_dump_[id].json" entspricht
-    if filename.startswith("filtered_dump_") and filename.endswith(".json"):
+    # Überprüfen Sie, ob die Datei dem Muster "article_[id].json" entspricht
+    if filename.startswith("article") and filename.endswith(".json"):
 
         # Dateipfad erstellen
         file_path = os.path.join(output_dir, filename)
@@ -70,11 +70,10 @@ for filename in os.listdir(output_dir):
                 entry['short_description_text_cleaned'])
 
         # Pfad für die bereinigte Datei erstellen
-        cleaned_file_path = os.path.join(cleaned_output_dir, filename.replace(
-            "filtered_dump_", "cleaned_filtered_dump_"))
+        cleaned_file_path = os.path.join(cleaned_output_dir, filename)
 
         # Bereinigte Daten speichern
         with open(cleaned_file_path, "w") as file:
             json.dump(data, file, indent=4)
 
-print("Cleaning completed and saved to the 'output_cleaned' directory.")
+print("Cleaning completed and saved to the 'articles_cleaned' directory.")
