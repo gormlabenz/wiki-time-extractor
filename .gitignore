@@ -160,7 +160,7 @@ cython_debug/
 #.idea/
 
 dump.xml
-output/*
-generated_output/*
-output_cleaned/*
-generated_output_cleaned/*
+articles/*
+events/*
+articles_cleaned/*
+events_cleaned/*

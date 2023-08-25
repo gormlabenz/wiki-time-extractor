@@ -1,9 +1,0 @@
-FROM llama2
-
-# set the temperature to 1 [higher is more creative, lower is more coherent]
-PARAMETER temperature 0.3
-
-# set the system prompt
-SYSTEM """
-You are a service that translates Wikipedia articles into programs represented as JSON
-"""
